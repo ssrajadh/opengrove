@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
-import OpenAI from "openai";
+import OpenAI from "openai/index.mjs";
 import {
   insertMessage,
   getMessages,
