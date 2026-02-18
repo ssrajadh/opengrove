@@ -3,7 +3,7 @@ import { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai/index.mjs";
 import {
   insertMessage,
-  getMessages,
+  getFullHistory,
   createConversation,
 } from "@/lib/db";
 import { buildContextWithRAG } from "@/lib/rag";
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     const userMsgId = randomUUID();
     await insertMessage(userMsgId, id, "user", messageText);
 
-    const allMessages = await getMessages(id);
+    const allMessages = await getFullHistory(id);
     const contextLimit = MODEL_CONTEXT_TOKENS[modelKey] ?? 128_000;
     const { ragContext, recentMessages, overflow } = await buildContextWithRAG(
       id, allMessages, messageText, contextLimit, RESPONSE_BUFFER_TOKENS,

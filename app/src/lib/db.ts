@@ -118,13 +118,32 @@ export async function deleteConversation(id: string): Promise<void> {
   stmt.run(id);
 }
 
+/**
+ * Re-parent direct children of `id` to point to `id`'s parent.
+ * Call this before deleting a conversation so branches aren't orphaned.
+ * If the deleted conversation is a root, children become roots (parent_id = NULL).
+ */
+export function reparentChildren(id: string): void {
+  const conversation = db.prepare(
+    "SELECT parent_id, branch_point_index FROM conversations WHERE id = ?"
+  ).get(id) as { parent_id: string | null; branch_point_index: number | null } | undefined;
+  if (!conversation) return;
+
+  // Point children to this conversation's parent (or NULL if root)
+  db.prepare(
+    "UPDATE conversations SET parent_id = ? WHERE parent_id = ?"
+  ).run(conversation.parent_id, id);
+}
+
 // ---------------------------------------------------------------------------
 // Branching
 // ---------------------------------------------------------------------------
 
 /**
  * Create a new conversation branched from `parentId` at `branchPointIndex`.
- * Copies messages from the parent up to (and including) that index.
+ * No messages are copied — the branch references the parent's messages
+ * up to `branchPointIndex` via the lineage chain.  Only new messages
+ * added after branching live in the branch's own `messages` rows.
  * Returns the new conversation's ID.
  */
 export async function createBranch(
@@ -137,24 +156,9 @@ export async function createBranch(
   const branchId = randomUUID();
   const title = `Branch of ${parent.title}`.slice(0, 80);
 
-  // Create branch conversation
   db.prepare(
     "INSERT INTO conversations (id, title, model, parent_id, branch_point_index) VALUES (?, ?, ?, ?, ?)"
   ).run(branchId, title, parent.model, parentId, branchPointIndex);
-
-  // Copy messages up to branchPointIndex
-  const parentMessages = await getMessages(parentId);
-  const toCopy = parentMessages.slice(0, branchPointIndex + 1);
-
-  const insertStmt = db.prepare(
-    "INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)"
-  );
-  const tx = db.transaction((msgs: Message[]) => {
-    for (const m of msgs) {
-      insertStmt.run(randomUUID(), branchId, m.role, m.content);
-    }
-  });
-  tx(toCopy);
 
   return branchId;
 }
@@ -191,6 +195,65 @@ export function getConversationLineage(conversationId: string): LineageEntry[] {
   }
 
   return lineage;
+}
+
+/**
+ * Resolve the full message history for a conversation by walking up the
+ * lineage chain and concatenating inherited + own messages.
+ *
+ * For a root conversation this is equivalent to `getMessages(id)`.
+ * For a branch it returns:
+ *   parent history[0..branchPoint] + own messages (ordered chronologically).
+ * Recurses for deeply nested branches.
+ */
+export async function getFullHistory(
+  conversationId: string,
+): Promise<Message[]> {
+  const lineage = getConversationLineage(conversationId);
+
+  // lineage is [self, parent, grandparent, ... , root]
+  // Build history bottom-up: start from root, slice at each branch point,
+  // then append the branch's own messages.
+  const segments: Message[][] = [];
+
+  for (let i = lineage.length - 1; i >= 0; i--) {
+    const entry = lineage[i];
+    const msgs = await getMessages(entry.conversationId);
+
+    if (i === lineage.length - 1) {
+      // Root (or furthest ancestor): take messages up to the *next*
+      // entry's branch point (if there is a next entry).
+      const nextEntry = i > 0 ? lineage[i - 1] : null;
+      if (nextEntry && nextEntry.branchPointIndex != null) {
+        segments.push(msgs.slice(0, nextEntry.branchPointIndex + 1));
+      } else {
+        segments.push(msgs);
+      }
+    } else if (i > 0) {
+      // Intermediate ancestor: own messages, sliced at the child's branch point
+      const nextEntry = lineage[i - 1];
+      if (nextEntry.branchPointIndex != null) {
+        segments.push(msgs.slice(0, nextEntry.branchPointIndex + 1));
+      } else {
+        segments.push(msgs);
+      }
+    } else {
+      // The conversation itself: all its own messages
+      segments.push(msgs);
+    }
+  }
+
+  return segments.flat();
+}
+
+/**
+ * Get direct child conversations that branch from a given conversation.
+ */
+export function getChildConversations(parentId: string): Conversation[] {
+  const stmt = db.prepare(
+    "SELECT id, title, model, created_at, parent_id, branch_point_index FROM conversations WHERE parent_id = ?"
+  );
+  return stmt.all(parentId) as Conversation[];
 }
 
 // ---------------------------------------------------------------------------

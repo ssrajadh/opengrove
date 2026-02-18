@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConversation, getMessages, deleteConversation, deleteChunksForConversation } from "@/lib/db";
+import {
+  getConversation,
+  getFullHistory,
+  deleteConversation,
+  deleteChunksForConversation,
+  reparentChildren,
+} from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +18,10 @@ export async function DELETE(
   if (!conversation) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  // Clean up vector chunks before deleting the conversation (cascade won't cover virtual table)
+
+  // Re-parent direct children so branches aren't orphaned
+  reparentChildren(id);
+  // Clean up vector chunks (virtual table isn't covered by CASCADE)
   deleteChunksForConversation(id);
   await deleteConversation(id);
   return NextResponse.json({ ok: true });
@@ -27,6 +36,6 @@ export async function GET(
   if (!conversation) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  const messages = await getMessages(id);
+  const messages = await getFullHistory(id);
   return NextResponse.json({ ...conversation, messages });
 }
