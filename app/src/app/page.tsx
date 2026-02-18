@@ -80,6 +80,12 @@ export default function Home() {
     setMessages((prev) => [...prev, userMsg]);
     setLoading(true);
 
+    const streamingAssistantId = crypto.randomUUID();
+    setMessages((prev) => [
+      ...prev,
+      { id: streamingAssistantId, role: "assistant", content: "" },
+    ]);
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -91,17 +97,83 @@ export default function Home() {
         }),
       });
 
-      const data = await res.json();
-
       if (!res.ok) {
-        setMessages((prev) => prev.slice(0, -1));
+        const data = await res.json().catch(() => ({}));
+        setMessages((prev) => prev.filter((m) => m.id !== streamingAssistantId));
         alert(data.error ?? "Send failed");
         return;
       }
 
-      setCurrentId(data.conversationId);
-      setMessages((prev) => [...prev, data.message]);
-      await fetchConversations();
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      if (!reader) {
+        setMessages((prev) => prev.filter((m) => m.id !== streamingAssistantId));
+        alert("Streaming not supported");
+        return;
+      }
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          let data: { type: string; text?: string; error?: string; conversationId?: string; message?: Message };
+          try {
+            data = JSON.parse(trimmed) as typeof data;
+          } catch {
+            continue;
+          }
+          if (data.type === "chunk" && typeof data.text === "string") {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === streamingAssistantId
+                  ? { ...m, content: m.content + data.text }
+                  : m
+              )
+            );
+          } else if (data.type === "done" && data.conversationId != null && data.message) {
+            setCurrentId(data.conversationId);
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === streamingAssistantId ? data.message! : m
+              )
+            );
+            await fetchConversations();
+          } else if (data.type === "error") {
+            setMessages((prev) => prev.filter((m) => m.id !== streamingAssistantId));
+            alert(data.error ?? "Chat failed");
+          }
+        }
+      }
+
+      if (buffer.trim()) {
+        try {
+          const data = JSON.parse(buffer.trim()) as { type: string; error?: string; conversationId?: string; message?: Message };
+          if (data.type === "done" && data.conversationId != null && data.message) {
+            setCurrentId(data.conversationId);
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === streamingAssistantId ? data.message! : m
+              )
+            );
+            await fetchConversations();
+          } else if (data.type === "error") {
+            setMessages((prev) => prev.filter((m) => m.id !== streamingAssistantId));
+            alert(data.error ?? "Chat failed");
+          }
+        } catch {
+          // ignore final line parse errors
+        }
+      }
+    } catch (err) {
+      setMessages((prev) => prev.filter((m) => m.id !== streamingAssistantId));
+      alert(err instanceof Error ? err.message : "Send failed");
     } finally {
       setLoading(false);
     }
