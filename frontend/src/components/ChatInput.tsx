@@ -5,6 +5,10 @@ const MODELS = [
   { id: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite" },
   { id: "gemini-3-flash-preview", label: "Gemini 3 Flash" },
   { id: "gemini-3-pro-preview", label: "Gemini 3 Pro" },
+  { id: "gpt-4o", label: "GPT-4o" },
+  { id: "gpt-4o-mini", label: "GPT-4o Mini" },
+  { id: "gpt-4.1", label: "GPT-4.1" },
+  { id: "gpt-4.1-mini", label: "GPT-4.1 Mini" },
 ];
 
 export default function ChatInput({

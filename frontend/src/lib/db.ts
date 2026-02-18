@@ -1,7 +1,8 @@
 import path from "path";
 import fs from "fs";
 
-const DB_PATH = path.join(process.cwd(), "opengrove.json");
+// When app lives in frontend/, store data at repo root
+const DB_PATH = path.join(process.cwd(), "..", "opengrove.json");
 
 export type Conversation = {
   id: string;
