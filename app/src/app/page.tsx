@@ -4,15 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import MessageList from "@/components/MessageList";
 import ChatInput from "@/components/ChatInput";
+import type { Conversation, ClientMessage } from "@/types";
 
-type Conversation = {
-  id: string;
-  title: string;
-  model: string;
-  created_at: number;
-};
-
-type Message = { id: string; role: "user" | "assistant"; content: string };
+type Message = ClientMessage;
 
 export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([]);

@@ -1,8 +1,8 @@
 "use client";
 
-type Message = { id: string; role: "user" | "assistant"; content: string };
+import type { ClientMessage } from "@/types";
 
-export default function MessageList({ messages }: { messages: Message[] }) {
+export default function MessageList({ messages }: { messages: ClientMessage[] }) {
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-[var(--text-muted)] text-sm">

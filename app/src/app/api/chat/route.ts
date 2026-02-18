@@ -6,6 +6,7 @@ import {
   getMessages,
   createConversation,
 } from "@/lib/db";
+import { buildMessageWindow } from "@/lib/tokens";
 import { randomUUID } from "crypto";
 
 const GEMINI_MODELS: Record<string, string> = {
@@ -16,6 +17,22 @@ const GEMINI_MODELS: Record<string, string> = {
 };
 
 const OPENAI_MODELS = ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini"];
+
+/** Context window sizes in tokens per model. */
+const MODEL_CONTEXT_TOKENS: Record<string, number> = {
+  // Gemini
+  "gemini-2.0-flash":       1_048_576,
+  "gemini-2.0-flash-lite":  1_048_576,
+  "gemini-3-flash-preview": 1_048_576,
+  "gemini-3-pro-preview":   1_048_576,
+  // OpenAI
+  "gpt-4o":      128_000,
+  "gpt-4o-mini": 128_000,
+  "gpt-4.1":     1_047_576,
+  "gpt-4.1-mini":1_047_576,
+};
+
+const RESPONSE_BUFFER_TOKENS = 4096;
 
 function isOpenAIModel(modelKey: string): boolean {
   return OPENAI_MODELS.includes(modelKey) || modelKey.startsWith("gpt-");
@@ -46,7 +63,10 @@ export async function POST(req: NextRequest) {
     const userMsgId = randomUUID();
     await insertMessage(userMsgId, id, "user", messageText);
 
-    const history = await getMessages(id);
+    const allMessages = await getMessages(id);
+    const contextLimit = MODEL_CONTEXT_TOKENS[modelKey] ?? 128_000;
+    const messageBudget = contextLimit - RESPONSE_BUFFER_TOKENS;
+    const history = buildMessageWindow(allMessages, messageBudget);
     const assistantMsgId = randomUUID();
 
     const encoder = new TextEncoder();

@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-
-type Conversation = { id: string; title: string; model: string; created_at: number };
+import type { Conversation } from "@/types";
 
 export default function Sidebar({
   conversations,

@@ -1,5 +1,8 @@
 import Database from "better-sqlite3";
 import path from "path";
+import type { Conversation, Message } from "@/types";
+
+export type { Conversation, Message };
 
 // When app lives in frontend/, store data at repo root
 const DB_PATH = path.join(process.cwd(), "..", "opengrove.db");
@@ -24,21 +27,6 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
 `);
-
-export type Conversation = {
-  id: string;
-  title: string;
-  model: string;
-  created_at: number;
-};
-
-export type Message = {
-  id: string;
-  conversation_id: string;
-  role: "user" | "assistant";
-  content: string;
-  created_at: number;
-};
 
 export async function listConversations(): Promise<Conversation[]> {
   const stmt = db.prepare(
