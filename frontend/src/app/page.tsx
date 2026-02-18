@@ -58,6 +58,15 @@ export default function Home() {
     setInput("");
   };
 
+  const handleDeleteChat = async (id: string) => {
+    const res = await fetch(`/api/conversations/${id}`, { method: "DELETE" });
+    if (!res.ok) return;
+    if (currentId === id) {
+      handleNewChat();
+    }
+    await fetchConversations();
+  };
+
   const handleSend = async () => {
     const text = input.trim();
     if (!text || loading) return;
@@ -105,6 +114,7 @@ export default function Home() {
         currentId={currentId}
         onSelect={setCurrentId}
         onNewChat={handleNewChat}
+        onDelete={handleDeleteChat}
       />
       <main className="flex-1 flex flex-col min-w-0">
         <header className="shrink-0 border-b border-[var(--border)] px-4 py-3">
