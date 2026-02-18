@@ -10,6 +10,13 @@ export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
+export type WindowResult = {
+  /** Messages that fit within the token budget (chronological). */
+  window: Message[];
+  /** Messages that were excluded (oldest first). */
+  overflow: Message[];
+};
+
 /**
  * Build a recent-message window that fits within `tokenBudget`.
  *
@@ -18,12 +25,12 @@ export function estimateTokens(text: string): number {
  *  2. Never split a user/assistant pair — if one half doesn't fit, drop both.
  *  3. Return messages in chronological (original) order.
  *
- * Messages beyond the window are simply dropped (RAG retrieval is a future step).
+ * Overflow messages (those that didn't fit) are returned separately for RAG embedding.
  */
 export function buildMessageWindow(
   messages: Message[],
   tokenBudget: number,
-): Message[] {
+): WindowResult {
   const window: Message[] = [];
   let tokensUsed = 0;
 
@@ -65,5 +72,8 @@ export function buildMessageWindow(
     }
   }
 
-  return window;
+  // Everything from index 0 through i (inclusive) didn't fit → overflow
+  const overflow = i >= 0 ? messages.slice(0, i + 1) : [];
+
+  return { window, overflow };
 }

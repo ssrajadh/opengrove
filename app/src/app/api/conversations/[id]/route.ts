@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConversation, getMessages, deleteConversation } from "@/lib/db";
+import { getConversation, getMessages, deleteConversation, deleteChunksForConversation } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +12,8 @@ export async function DELETE(
   if (!conversation) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  // Clean up vector chunks before deleting the conversation (cascade won't cover virtual table)
+  deleteChunksForConversation(id);
   await deleteConversation(id);
   return NextResponse.json({ ok: true });
 }

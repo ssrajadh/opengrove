@@ -61,6 +61,27 @@ export default function Home() {
     await fetchConversations();
   };
 
+  const handleBranch = async (messageIndex: number) => {
+    if (!currentId || loading) return;
+    try {
+      const res = await fetch(`/api/conversations/${currentId}/branch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageIndex }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error ?? "Branch failed");
+        return;
+      }
+      const branch = await res.json();
+      await fetchConversations();
+      setCurrentId(branch.id);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Branch failed");
+    }
+  };
+
   const handleSend = async () => {
     const text = input.trim();
     if (!text || loading) return;
@@ -188,7 +209,7 @@ export default function Home() {
             OpenGrove
           </h1>
         </header>
-        <MessageList messages={messages} />
+        <MessageList messages={messages} onBranch={currentId ? handleBranch : undefined} />
         <ChatInput
           value={input}
           onChange={setInput}

@@ -6,7 +6,8 @@ import {
   getMessages,
   createConversation,
 } from "@/lib/db";
-import { buildMessageWindow } from "@/lib/tokens";
+import { buildContextWithRAG } from "@/lib/rag";
+import { embedAndStoreOverflow } from "@/lib/embeddings";
 import { randomUUID } from "crypto";
 
 const GEMINI_MODELS: Record<string, string> = {
@@ -65,8 +66,22 @@ export async function POST(req: NextRequest) {
 
     const allMessages = await getMessages(id);
     const contextLimit = MODEL_CONTEXT_TOKENS[modelKey] ?? 128_000;
-    const messageBudget = contextLimit - RESPONSE_BUFFER_TOKENS;
-    const history = buildMessageWindow(allMessages, messageBudget);
+    const { ragContext, recentMessages, overflow } = await buildContextWithRAG(
+      id, allMessages, messageText, contextLimit, RESPONSE_BUFFER_TOKENS,
+    );
+
+    // Build provider-ready history with optional RAG preamble
+    const history: Array<{ role: "user" | "assistant"; content: string }> = [];
+    if (ragContext) {
+      history.push(
+        { role: "user", content: "Relevant context from earlier in this conversation:\n" + ragContext },
+        { role: "assistant", content: "Understood, I have that context." },
+      );
+    }
+    for (const m of recentMessages) {
+      history.push({ role: m.role, content: m.content });
+    }
+
     const assistantMsgId = randomUUID();
 
     const encoder = new TextEncoder();
@@ -142,6 +157,14 @@ export async function POST(req: NextRequest) {
 
           const text = fullText.trim();
           await insertMessage(assistantMsgId, id, "assistant", text);
+
+          // Fire-and-forget: embed overflow messages for future RAG retrieval
+          if (overflow.length > 0) {
+            embedAndStoreOverflow(id, overflow).catch((err) =>
+              console.error("Background embedding failed:", err),
+            );
+          }
+
           send({
             type: "done",
             conversationId: id,
