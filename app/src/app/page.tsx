@@ -55,10 +55,16 @@ export default function Home() {
   const handleDeleteChat = async (id: string) => {
     const res = await fetch(`/api/conversations/${id}`, { method: "DELETE" });
     if (!res.ok) return;
-    if (currentId === id) {
-      handleNewChat();
+    // The backend cascade-deletes all descendants too.
+    // If current chat was the deleted one or any of its descendants, reset.
+    const updated = await fetch("/api/conversations");
+    if (updated.ok) {
+      const data = await updated.json();
+      setConversations(data);
+      if (currentId && !data.some((c: Conversation) => c.id === currentId)) {
+        handleNewChat();
+      }
     }
-    await fetchConversations();
   };
 
   const handleBranch = async (messageIndex: number) => {

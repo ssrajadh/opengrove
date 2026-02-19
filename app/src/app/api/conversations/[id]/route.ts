@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getConversation,
   getFullHistory,
-  deleteConversation,
-  deleteChunksForConversation,
-  reparentChildren,
+  deleteConversationTree,
+  hasChildren,
 } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -19,11 +18,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Re-parent direct children so branches aren't orphaned
-  reparentChildren(id);
-  // Clean up vector chunks (virtual table isn't covered by CASCADE)
-  deleteChunksForConversation(id);
-  await deleteConversation(id);
+  await deleteConversationTree(id);
   return NextResponse.json({ ok: true });
 }
 

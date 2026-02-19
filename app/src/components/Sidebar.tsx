@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import type { Conversation } from "@/types";
+import ConfirmModal from "./ConfirmModal";
 
 type ConversationNode = Conversation & { children: ConversationNode[] };
 
@@ -40,6 +41,7 @@ export default function Sidebar({
   onDelete: (id: string) => void;
 }) {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const tree = useMemo(() => buildTree(conversations), [conversations]);
@@ -101,8 +103,12 @@ export default function Sidebar({
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    onDelete(c.id);
                     setOpenMenuId(null);
+                    if (c.children.length > 0) {
+                      setConfirmDeleteId(c.id);
+                    } else {
+                      onDelete(c.id);
+                    }
                   }}
                   className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-[var(--border)]/50"
                 >
@@ -137,6 +143,19 @@ export default function Sidebar({
         )}
         {tree.map((c) => renderItem(c, 0))}
       </nav>
+
+      {confirmDeleteId && (
+        <ConfirmModal
+          title="Delete chat and subchats"
+          message="Deleting this chat will also delete all subchats below it. Are you sure?"
+          confirmLabel="Delete all"
+          onConfirm={() => {
+            onDelete(confirmDeleteId);
+            setConfirmDeleteId(null);
+          }}
+          onCancel={() => setConfirmDeleteId(null)}
+        />
+      )}
     </aside>
   );
 }

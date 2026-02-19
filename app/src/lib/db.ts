@@ -119,20 +119,56 @@ export async function deleteConversation(id: string): Promise<void> {
 }
 
 /**
- * Re-parent direct children of `id` to point to `id`'s parent.
- * Call this before deleting a conversation so branches aren't orphaned.
- * If the deleted conversation is a root, children become roots (parent_id = NULL).
+ * Collect all descendant conversation IDs (children, grandchildren, …)
+ * using an iterative BFS.
  */
-export function reparentChildren(id: string): void {
-  const conversation = db.prepare(
-    "SELECT parent_id, branch_point_index FROM conversations WHERE id = ?"
-  ).get(id) as { parent_id: string | null; branch_point_index: number | null } | undefined;
-  if (!conversation) return;
+export function getDescendantIds(id: string): string[] {
+  const stmt = db.prepare(
+    "SELECT id FROM conversations WHERE parent_id = ?"
+  );
+  const descendants: string[] = [];
+  const queue: string[] = [id];
 
-  // Point children to this conversation's parent (or NULL if root)
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const children = stmt.all(current) as { id: string }[];
+    for (const child of children) {
+      descendants.push(child.id);
+      queue.push(child.id);
+    }
+  }
+
+  return descendants;
+}
+
+/**
+ * Check whether a conversation has any child branches.
+ */
+export function hasChildren(id: string): boolean {
+  const row = db.prepare(
+    "SELECT 1 FROM conversations WHERE parent_id = ? LIMIT 1"
+  ).get(id);
+  return row != null;
+}
+
+/**
+ * Delete a conversation and all its descendants (cascade).
+ * Also cleans up vector chunks for each deleted conversation.
+ */
+export async function deleteConversationTree(id: string): Promise<void> {
+  const descendants = getDescendantIds(id);
+  const allIds = [id, ...descendants];
+
+  // Clean up vector chunks for all conversations being deleted
+  for (const cid of allIds) {
+    deleteChunksForConversation(cid);
+  }
+
+  // Delete all conversations (messages cascade via FK)
+  const placeholders = allIds.map(() => "?").join(",");
   db.prepare(
-    "UPDATE conversations SET parent_id = ? WHERE parent_id = ?"
-  ).run(conversation.parent_id, id);
+    `DELETE FROM conversations WHERE id IN (${placeholders})`
+  ).run(...allIds);
 }
 
 // ---------------------------------------------------------------------------
