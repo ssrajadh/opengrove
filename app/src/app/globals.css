@@ -77,7 +77,7 @@ body {
 
 /* Markdown prose styles for assistant messages */
 .prose-chat {
-  @apply text-sm text-zinc-200 leading-relaxed;
+  @apply text-base text-zinc-200 leading-7;
 }
 .prose-chat p {
   @apply mb-3 last:mb-0;
@@ -105,10 +105,10 @@ body {
   @apply bg-zinc-800 text-zinc-300 px-1.5 py-0.5 rounded text-xs font-mono;
 }
 .prose-chat pre {
-  @apply bg-zinc-900 border border-zinc-700/50 rounded-md p-3 mb-3 overflow-x-auto;
+  @apply inline-block w-fit max-w-full bg-zinc-900 border border-zinc-700/50 rounded-md p-3 mb-3 overflow-x-auto;
 }
 .prose-chat pre code {
-  @apply bg-transparent p-0 text-xs font-mono leading-relaxed;
+  @apply bg-transparent p-0 text-sm font-mono leading-relaxed;
 }
 .prose-chat blockquote {
   @apply border-l-2 border-zinc-600 pl-3 text-zinc-400 italic my-3;
