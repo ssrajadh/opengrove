@@ -3,6 +3,9 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import type { Conversation } from "@/types";
 import ConfirmModal from "./ConfirmModal";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 
 type ConversationNode = Conversation & { children: ConversationNode[] };
 
@@ -58,22 +61,25 @@ export default function Sidebar({
   }, [openMenuId]);
 
   function renderItem(c: ConversationNode, depth: number) {
+    const isActive = currentId === c.id;
+
     return (
       <div key={c.id}>
         <div
-          className={`group flex items-center gap-1 rounded-lg text-sm ${
-            currentId === c.id
-              ? "bg-[var(--border)] text-[var(--text)]"
-              : "text-[var(--text-muted)] hover:bg-[var(--border)]/50 hover:text-[var(--text)]"
-          }`}
-          style={{ paddingLeft: `${Math.min(depth, 4) * 12 + 4}px` }}
+          className={cn(
+            "group flex items-center gap-1 rounded-md text-sm transition-colors",
+            isActive
+              ? "bg-zinc-800 text-zinc-100"
+              : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"
+          )}
+          style={{ paddingLeft: `${Math.min(depth, 4) * 16 + 4}px` }}
         >
           {depth > 0 && (
-            <span className="text-[var(--text-muted)] opacity-50 text-xs mr-0.5 select-none">⑂</span>
+            <span className="text-zinc-600 text-xs mr-0.5 select-none">⑂</span>
           )}
           <button
             onClick={() => onSelect(c.id)}
-            className="flex-1 min-w-0 text-left px-2 py-2 truncate"
+            className="flex-1 min-w-0 text-left px-2 py-1.5 truncate"
           >
             {c.title || "New chat"}
           </button>
@@ -83,7 +89,7 @@ export default function Sidebar({
                 e.stopPropagation();
                 setOpenMenuId(openMenuId === c.id ? null : c.id);
               }}
-              className="p-1.5 rounded hover:bg-[var(--border)]/70 text-[var(--text-muted)]"
+              className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 hover:bg-zinc-700 text-zinc-500 transition-opacity"
               aria-label="Menu"
             >
               <svg
@@ -91,7 +97,6 @@ export default function Sidebar({
                 height="16"
                 viewBox="0 0 24 24"
                 fill="currentColor"
-                className="opacity-70"
               >
                 <circle cx="12" cy="6" r="1.5" />
                 <circle cx="12" cy="12" r="1.5" />
@@ -99,7 +104,7 @@ export default function Sidebar({
               </svg>
             </button>
             {openMenuId === c.id && (
-              <div className="absolute right-0 top-full mt-0.5 py-1 rounded-lg bg-[var(--surface)] border border-[var(--border)] shadow-lg z-10 min-w-[120px]">
+              <div className="absolute right-0 top-full mt-1 py-1 rounded-md bg-zinc-800 border border-zinc-700 shadow-xl z-10 min-w-[130px]">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -110,7 +115,7 @@ export default function Sidebar({
                       onDelete(c.id);
                     }
                   }}
-                  className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-[var(--border)]/50"
+                  className="w-full text-left px-3 py-1.5 text-sm text-red-400 hover:bg-zinc-700/70 rounded-sm transition-colors"
                 >
                   Delete chat
                 </button>
@@ -119,7 +124,7 @@ export default function Sidebar({
           </div>
         </div>
         {c.children.length > 0 && (
-          <div className="border-l border-[var(--border)] ml-4">
+          <div className="ml-4 border-l border-zinc-700/60 pl-1">
             {c.children.map((child) => renderItem(child, depth + 1))}
           </div>
         )}
@@ -128,21 +133,31 @@ export default function Sidebar({
   }
 
   return (
-    <aside className="w-56 shrink-0 border-r border-[var(--border)] bg-[var(--surface)] flex flex-col">
-      <button
-        onClick={onNewChat}
-        className="m-3 px-3 py-2 rounded-lg border border-[var(--border)] text-sm hover:bg-[var(--border)] transition-colors"
-      >
-        + New chat
-      </button>
-      <nav className="flex-1 overflow-y-auto p-2">
-        {conversations.length === 0 && (
-          <p className="text-[var(--text-muted)] text-xs px-2 py-4">
-            No conversations yet
-          </p>
-        )}
-        {tree.map((c) => renderItem(c, 0))}
-      </nav>
+    <aside className="w-56 shrink-0 border-r border-zinc-800 bg-zinc-900 flex flex-col">
+      <div className="p-3">
+        <Button
+          onClick={onNewChat}
+          variant="outline"
+          className="w-full justify-start gap-2 border-zinc-700 bg-transparent text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          New chat
+        </Button>
+      </div>
+
+      <ScrollArea className="flex-1">
+        <nav className="px-2 pb-2">
+          {conversations.length === 0 && (
+            <p className="text-zinc-500 text-xs px-2 py-4">
+              No conversations yet
+            </p>
+          )}
+          {tree.map((c) => renderItem(c, 0))}
+        </nav>
+      </ScrollArea>
 
       {confirmDeleteId && (
         <ConfirmModal
