@@ -48,7 +48,7 @@ export default function MessageList({
             >
               {/* Assistant message: left-aligned, no bubble, subtle left accent */}
               {!isUser && (
-                <div className="max-w-3xl flex flex-col">
+                <div className="flex-1 min-w-0 flex flex-col">
                   <div className="border-l-2 border-zinc-700 pl-4 py-1">
                     <div className="prose-chat break-words">
                       <ReactMarkdown
@@ -60,7 +60,7 @@ export default function MessageList({
                     </div>
                   </div>
                   {onBranch && m.content && (
-                    <div className="mt-1.5 pl-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="mt-1.5 pl-4 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
@@ -83,14 +83,14 @@ export default function MessageList({
 
               {/* User message: right-aligned muted bubble */}
               {isUser && (
-                <div className="max-w-2xl flex flex-col items-end">
+                <div className="max-w-[80%] flex flex-col items-end">
                   <div className="rounded-2xl rounded-br-sm bg-zinc-800 border border-zinc-700/50 px-4 py-2.5">
                     <p className="whitespace-pre-wrap break-words text-sm text-zinc-100">
                       {m.content}
                     </p>
                   </div>
                   {onBranch && m.content && (
-                    <div className="mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="mt-1.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button

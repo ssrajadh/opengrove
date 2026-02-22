@@ -64,10 +64,10 @@ export default function Sidebar({
     const isActive = currentId === c.id;
 
     return (
-      <div key={c.id}>
+      <div key={c.id} className="w-full min-w-0">
         <div
           className={cn(
-            "group flex items-center gap-1 rounded-md text-sm transition-colors",
+            "group flex w-full min-w-0 items-center gap-1 rounded-md text-sm transition-colors",
             isActive
               ? "bg-zinc-800 text-zinc-100"
               : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"
@@ -79,9 +79,12 @@ export default function Sidebar({
           )}
           <button
             onClick={() => onSelect(c.id)}
-            className="flex-1 min-w-0 text-left px-2 py-1.5 truncate"
+            className="flex-1 min-w-0 px-2 py-1.5 text-left"
+            title={c.title || "New chat"}
           >
-            {c.title || "New chat"}
+            <span className="block w-full overflow-hidden text-ellipsis whitespace-nowrap">
+              {c.title || "New chat"}
+            </span>
           </button>
           <div className="relative shrink-0" ref={openMenuId === c.id ? menuRef : undefined}>
             <button
@@ -89,19 +92,14 @@ export default function Sidebar({
                 e.stopPropagation();
                 setOpenMenuId(openMenuId === c.id ? null : c.id);
               }}
-              className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 hover:bg-zinc-700 text-zinc-500 transition-opacity"
+              className={cn(
+                "rounded-md p-1.5 text-zinc-300 hover:bg-zinc-700",
+                openMenuId === c.id || isActive ? "bg-zinc-800/60" : ""
+              )}
               aria-label="Menu"
+              aria-haspopup="menu"
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-              >
-                <circle cx="12" cy="6" r="1.5" />
-                <circle cx="12" cy="12" r="1.5" />
-                <circle cx="12" cy="18" r="1.5" />
-              </svg>
+              <span className="block text-base leading-none">⋮</span>
             </button>
             {openMenuId === c.id && (
               <div className="absolute right-0 top-full mt-1 py-1 rounded-md bg-zinc-800 border border-zinc-700 shadow-xl z-10 min-w-[130px]">
@@ -124,7 +122,7 @@ export default function Sidebar({
           </div>
         </div>
         {c.children.length > 0 && (
-          <div className="ml-4 border-l border-zinc-700/60 pl-1">
+          <div className="ml-4 min-w-0 border-l border-zinc-700/60 pl-1">
             {c.children.map((child) => renderItem(child, depth + 1))}
           </div>
         )}
@@ -133,7 +131,7 @@ export default function Sidebar({
   }
 
   return (
-    <aside className="w-56 shrink-0 border-r border-zinc-800 bg-zinc-900 flex flex-col">
+    <aside className="w-72 shrink-0 border-r border-zinc-800 bg-zinc-900 flex flex-col">
       <div className="p-3">
         <Button
           onClick={onNewChat}
@@ -149,7 +147,7 @@ export default function Sidebar({
       </div>
 
       <ScrollArea className="flex-1">
-        <nav className="px-2 pb-2">
+        <nav className="min-w-0 px-2 pb-2">
           {conversations.length === 0 && (
             <p className="text-zinc-500 text-xs px-2 py-4">
               No conversations yet

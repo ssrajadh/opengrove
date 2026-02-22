@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import { ArrowUp, Plus, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -57,14 +57,22 @@ export default function ChatInput({
     [onChange]
   );
 
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    const maxHeight = LINE_HEIGHT * MAX_ROWS + PADDING_Y;
+    ta.style.height = `${Math.min(ta.scrollHeight, maxHeight)}px`;
+  }, [value]);
+
   const currentModelLabel =
     MODELS.find((m) => m.id === model)?.label ?? model;
 
   return (
     <div className="sticky bottom-0 shrink-0">
-      <div className="max-w-3xl mx-auto px-4 py-3 flex flex-col items-center gap-2">
+      <div className="mx-auto w-full max-w-5xl px-4 py-3 flex flex-col items-stretch gap-2">
         {/* Input capsule */}
-        <div className="relative flex items-end gap-2 rounded-full border border-zinc-700/60 bg-zinc-900 pl-1.5 pr-1.5 py-1.5 focus-within:border-zinc-600 transition-colors">
+        <div className="relative flex w-full items-end gap-2 rounded-3xl border border-zinc-700/60 bg-zinc-900 pl-1.5 pr-1.5 py-1.5 focus-within:border-zinc-600 transition-colors">
           {/* Plus button */}
           <Button
             variant="ghost"
@@ -87,7 +95,7 @@ export default function ChatInput({
             placeholder="Message..."
             rows={1}
             disabled={disabled}
-            className="flex-1 resize-none border-0 bg-transparent p-0 py-1 text-sm text-zinc-100 placeholder:text-zinc-500 shadow-none focus-visible:ring-0 min-h-0 leading-5"
+            className="flex-1 resize-none overflow-y-auto border-0 bg-transparent p-0 py-1 text-sm text-zinc-100 placeholder:text-zinc-500 shadow-none focus-visible:ring-0 min-h-0 max-h-[136px] leading-5"
           />
 
           {/* Send button */}
