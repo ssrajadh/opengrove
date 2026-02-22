@@ -25,7 +25,9 @@ function buildTree(conversations: Conversation[]): ConversationNode[] {
   }
   // Sort children newest-first
   for (const node of Array.from(map.values())) {
-    node.children.sort((a: ConversationNode, b: ConversationNode) => b.created_at - a.created_at);
+    node.children.sort(
+      (a: ConversationNode, b: ConversationNode) => b.created_at - a.created_at
+    );
   }
   return roots;
 }
@@ -65,12 +67,15 @@ export default function Sidebar({
     const isActive = currentId === c.id;
     const hasChildren = c.children.length > 0;
     const isCollapsed = collapsedIds.has(c.id);
+    const isMenuOpen = openMenuId === c.id;
 
     return (
       <div key={c.id} className="w-full min-w-0">
+        {/* FIX: added overflow-hidden to prevent flex children from expanding
+            the row beyond its bounds, which breaks text-ellipsis */}
         <div
           className={cn(
-            "group flex w-full min-w-0 items-center gap-1 rounded-md text-sm transition-colors",
+            "group flex w-full min-w-0 overflow-hidden items-center gap-1 rounded-md text-sm transition-colors",
             isActive
               ? "bg-zinc-800 text-zinc-100"
               : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"
@@ -78,8 +83,12 @@ export default function Sidebar({
           style={{ paddingLeft: `${Math.min(depth, 4) * 16 + 4}px` }}
         >
           {depth > 0 && (
-            <span className="text-zinc-600 text-xs mr-0.5 select-none">⑂</span>
+            <span className="text-zinc-600 text-xs mr-0.5 shrink-0 select-none">
+              ⑂
+            </span>
           )}
+
+          {/* Collapse/expand toggle */}
           {hasChildren ? (
             <button
               onClick={(e) => {
@@ -117,31 +126,45 @@ export default function Sidebar({
           ) : (
             <span className="w-4 shrink-0" aria-hidden />
           )}
+
+          {/* Title button — flex-1 + min-w-0 allows truncation to work */}
           <button
             onClick={() => onSelect(c.id)}
             className="flex-1 min-w-0 px-2 py-1.5 text-left"
             title={c.title || "New chat"}
           >
+            {/* FIX: block + w-full + overflow-hidden + truncation classes
+                all together. The parent must also have overflow-hidden (above). */}
             <span className="block w-full overflow-hidden text-ellipsis whitespace-nowrap">
               {c.title || "New chat"}
             </span>
           </button>
-          <div className="relative shrink-0" ref={openMenuId === c.id ? menuRef : undefined}>
+
+          {/* Three-dot menu — FIX: hidden by default, revealed on row hover
+              or when the menu is open or the row is active */}
+          <div
+            className="relative shrink-0"
+            ref={isMenuOpen ? menuRef : undefined}
+          >
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setOpenMenuId(openMenuId === c.id ? null : c.id);
+                setOpenMenuId(isMenuOpen ? null : c.id);
               }}
               className={cn(
-                "rounded-md p-1.5 text-zinc-300 hover:bg-zinc-700",
-                openMenuId === c.id || isActive ? "bg-zinc-800/60" : ""
+                "rounded-md p-1.5 text-zinc-300 hover:bg-zinc-700 transition-opacity",
+                // Hidden by default; shown on group hover, when active, or when menu is open
+                isMenuOpen || isActive
+                  ? "opacity-100"
+                  : "opacity-0 group-hover:opacity-100"
               )}
               aria-label="Menu"
               aria-haspopup="menu"
             >
               <span className="block text-base leading-none">⋮</span>
             </button>
-            {openMenuId === c.id && (
+
+            {isMenuOpen && (
               <div className="absolute right-0 top-full mt-1 py-1 rounded-md bg-zinc-800 border border-zinc-700 shadow-xl z-10 min-w-[130px]">
                 <button
                   onClick={(e) => {
@@ -161,6 +184,8 @@ export default function Sidebar({
             )}
           </div>
         </div>
+
+        {/* Children */}
         {hasChildren && !isCollapsed && (
           <div className="ml-4 min-w-0 border-l border-zinc-700/60 pl-1">
             {c.children.map((child) => renderItem(child, depth + 1))}
@@ -178,7 +203,16 @@ export default function Sidebar({
           variant="outline"
           className="w-full justify-start gap-2 border-zinc-700 bg-transparent text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
@@ -196,6 +230,30 @@ export default function Sidebar({
           {tree.map((c) => renderItem(c, 0))}
         </nav>
       </ScrollArea>
+
+      <div className="border-t border-zinc-800 p-3">
+        <Button
+          variant="ghost"
+          className="w-full justify-start gap-2 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+          type="button"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-.4-1.1 1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H2.8a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.1-.4 1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V2.8a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 .4 1.1 1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.24.33.4.72.46 1.13.05.41-.01.83-.18 1.21a1.7 1.7 0 0 0 0 1.32c.17.38.23.8.18 1.21-.06.41-.22.8-.46 1.13Z" />
+          </svg>
+          Settings
+        </Button>
+      </div>
 
       {confirmDeleteId && (
         <ConfirmModal
