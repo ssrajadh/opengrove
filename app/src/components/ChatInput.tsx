@@ -69,10 +69,10 @@ export default function ChatInput({
     MODELS.find((m) => m.id === model)?.label ?? model;
 
   return (
-    <div className="sticky bottom-0 shrink-0">
+    <div className="absolute inset-x-0 bottom-0 z-20">
       <div className="mx-auto w-full max-w-5xl px-4 py-3 flex flex-col items-stretch gap-2">
         {/* Input capsule */}
-        <div className="relative flex w-full items-end gap-2 rounded-3xl border border-zinc-700/60 bg-zinc-900 pl-1.5 pr-1.5 py-1.5 focus-within:border-zinc-600 transition-colors">
+        <div className="relative flex w-full items-end gap-2 rounded-3xl border border-zinc-700/60 bg-zinc-900/70 pl-1.5 pr-1.5 py-1.5 focus-within:border-zinc-600 transition-colors">
           {/* Plus button */}
           <Button
             variant="ghost"
@@ -118,7 +118,7 @@ export default function ChatInput({
         <div className="flex items-center">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700/60 bg-zinc-900 px-3 py-1 text-xs text-zinc-400 hover:text-zinc-300 hover:border-zinc-600 transition-colors focus:outline-none">
+              <button className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700/60 bg-zinc-900/65 px-3 py-1 text-xs text-zinc-400 hover:text-zinc-300 hover:border-zinc-600 transition-colors focus:outline-none">
                 {currentModelLabel}
                 <ChevronDown className="h-3 w-3 opacity-60" />
               </button>
