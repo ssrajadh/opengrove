@@ -45,6 +45,7 @@ export default function Sidebar({
 }) {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const menuRef = useRef<HTMLDivElement>(null);
 
   const tree = useMemo(() => buildTree(conversations), [conversations]);
@@ -62,6 +63,8 @@ export default function Sidebar({
 
   function renderItem(c: ConversationNode, depth: number) {
     const isActive = currentId === c.id;
+    const hasChildren = c.children.length > 0;
+    const isCollapsed = collapsedIds.has(c.id);
 
     return (
       <div key={c.id} className="w-full min-w-0">
@@ -76,6 +79,43 @@ export default function Sidebar({
         >
           {depth > 0 && (
             <span className="text-zinc-600 text-xs mr-0.5 select-none">⑂</span>
+          )}
+          {hasChildren ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setCollapsedIds((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(c.id)) {
+                    next.delete(c.id);
+                  } else {
+                    next.add(c.id);
+                  }
+                  return next;
+                });
+              }}
+              className="shrink-0 rounded-sm px-1 py-0.5 text-xs text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
+              aria-label={isCollapsed ? "Expand subchats" : "Collapse subchats"}
+              title={isCollapsed ? "Expand subchats" : "Collapse subchats"}
+            >
+              <svg
+                viewBox="0 0 16 16"
+                className={cn(
+                  "h-3.5 w-3.5 text-current transition-transform",
+                  isCollapsed ? "-rotate-90" : "rotate-0"
+                )}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <polyline points="2.5,5.5 8,11 13.5,5.5" />
+              </svg>
+            </button>
+          ) : (
+            <span className="w-4 shrink-0" aria-hidden />
           )}
           <button
             onClick={() => onSelect(c.id)}
@@ -121,7 +161,7 @@ export default function Sidebar({
             )}
           </div>
         </div>
-        {c.children.length > 0 && (
+        {hasChildren && !isCollapsed && (
           <div className="ml-4 min-w-0 border-l border-zinc-700/60 pl-1">
             {c.children.map((child) => renderItem(child, depth + 1))}
           </div>
