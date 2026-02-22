@@ -34,7 +34,7 @@ export default function MessageList({
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex-1 overflow-y-auto p-4 pb-4 space-y-6">
+      <div className="flex-1 overflow-y-auto p-4 pb-28 space-y-6">
         {messages.map((m, idx) => {
           const isUser = m.role === "user";
 
