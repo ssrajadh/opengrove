@@ -34,7 +34,7 @@ export default function MessageList({
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex-1 overflow-y-auto p-4 space-y-6">
+      <div className="flex-1 overflow-y-auto p-4 pb-32 space-y-6">
         {messages.map((m, idx) => {
           const isUser = m.role === "user";
 
@@ -48,7 +48,7 @@ export default function MessageList({
             >
               {/* Assistant message: left-aligned, no bubble, subtle left accent */}
               {!isUser && (
-                <div className="max-w-[85%] flex flex-col">
+                <div className="max-w-3xl flex flex-col">
                   <div className="border-l-2 border-zinc-700 pl-4 py-1">
                     <div className="prose-chat break-words">
                       <ReactMarkdown
@@ -83,7 +83,7 @@ export default function MessageList({
 
               {/* User message: right-aligned muted bubble */}
               {isUser && (
-                <div className="max-w-[85%] flex flex-col items-end">
+                <div className="max-w-2xl flex flex-col items-end">
                   <div className="rounded-2xl rounded-br-sm bg-zinc-800 border border-zinc-700/50 px-4 py-2.5">
                     <p className="whitespace-pre-wrap break-words text-sm text-zinc-100">
                       {m.content}

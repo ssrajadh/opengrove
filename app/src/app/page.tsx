@@ -215,15 +215,17 @@ export default function Home() {
             OpenGrove
           </h1>
         </header>
-        <MessageList messages={messages} onBranch={currentId ? handleBranch : undefined} />
-        <ChatInput
-          value={input}
-          onChange={setInput}
-          onSend={handleSend}
-          model={model}
-          onModelChange={setModel}
-          disabled={loading}
-        />
+        <div className="relative flex-1 flex flex-col min-h-0">
+          <MessageList messages={messages} onBranch={currentId ? handleBranch : undefined} />
+          <ChatInput
+            value={input}
+            onChange={setInput}
+            onSend={handleSend}
+            model={model}
+            onModelChange={setModel}
+            disabled={loading}
+          />
+        </div>
       </main>
     </div>
   );
