@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useState } from "react";
 import type { ClientMessage } from "@/types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -24,6 +24,20 @@ export default function MessageList({
   messages: ClientMessage[];
   onBranch?: (messageIndex: number) => void;
 }) {
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+
+  const handleCopy = async (messageId: string, content: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedMessageId(messageId);
+      window.setTimeout(() => {
+        setCopiedMessageId((prev) => (prev === messageId ? null : prev));
+      }, 1200);
+    } catch {
+      // Ignore clipboard errors in unsupported contexts.
+    }
+  };
+
   if (messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">
@@ -76,6 +90,21 @@ export default function MessageList({
                           Branch conversation from this message
                         </TooltipContent>
                       </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs text-zinc-500 hover:text-zinc-300"
+                            onClick={() => handleCopy(m.id, m.content)}
+                          >
+                            {copiedMessageId === m.id ? "⎘ Copied" : "⎘ Copy"}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">
+                          Copy message text
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
                   )}
                 </div>
@@ -104,6 +133,21 @@ export default function MessageList({
                         </TooltipTrigger>
                         <TooltipContent side="bottom">
                           Branch conversation from this message
+                        </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs text-zinc-500 hover:text-zinc-300"
+                            onClick={() => handleCopy(m.id, m.content)}
+                          >
+                            {copiedMessageId === m.id ? "⎘ Copied" : "⎘ Copy"}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">
+                          Copy message text
                         </TooltipContent>
                       </Tooltip>
                     </div>
