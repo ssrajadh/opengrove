@@ -358,6 +358,10 @@ const SUPPORTED_SETTINGS_KEYS = [
   "anthropic_api_key",
   "default_model",
   "hidden_models",
+  "local_models_enabled",
+  "local_runtime",
+  "local_endpoint",
+  "local_models_hidden",
 ] as const;
 
 export type SettingKey = (typeof SUPPORTED_SETTINGS_KEYS)[number];
@@ -369,7 +373,7 @@ export function isSupportedSettingKey(value: string): value is SettingKey {
 
 export function getSettings(): SettingsMap {
   const rows = db.prepare(
-    "SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?, ?)"
+    "SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?, ?, ?, ?, ?, ?)"
   ).all(...SUPPORTED_SETTINGS_KEYS) as Array<{ key: string; value: string }>;
 
   const settings: SettingsMap = {};
