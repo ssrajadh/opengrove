@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai/index.mjs";
+import { GEMINI_MODELS, OPENAI_MODELS } from "@/lib/model-constants";
 import {
   insertMessage,
   getFullHistory,
@@ -10,16 +11,6 @@ import {
 import { buildContextWithRAG } from "@/lib/rag";
 import { embedAndStoreOverflow } from "@/lib/embeddings";
 import { randomUUID } from "crypto";
-
-const GEMINI_MODELS: Record<string, string> = {
-  "gemini-2.0-flash": "gemini-2.0-flash",
-  "gemini-2.0-flash-lite": "gemini-2.0-flash-lite",
-  "gemini-3-flash-preview": "gemini-3-flash-preview",
-  "gemini-3-pro-preview": "gemini-3-pro-preview",
-};
-
-const OPENAI_MODELS = ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini"];
-
 /** Context window sizes in tokens per model. */
 const MODEL_CONTEXT_TOKENS: Record<string, number> = {
   // Gemini

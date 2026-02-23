@@ -1,28 +1,64 @@
 "use client";
 
-import { useRef, useCallback, useEffect } from "react";
+import { useRef, useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowUp, Plus, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { GEMINI_MODELS, OPENAI_MODELS } from "@/lib/model-constants";
 import { cn } from "@/lib/utils";
 
-const MODELS = [
-  { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
-  { id: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite" },
-  { id: "gemini-3-flash-preview", label: "Gemini 3 Flash" },
-  { id: "gemini-3-pro-preview", label: "Gemini 3 Pro" },
-  { id: "gpt-4o", label: "GPT-4o" },
-  { id: "gpt-4o-mini", label: "GPT-4o Mini" },
-  { id: "gpt-4.1", label: "GPT-4.1" },
-  { id: "gpt-4.1-mini", label: "GPT-4.1 Mini" },
+type ModelOption = { id: string; label: string };
+
+const LOCAL_MODELS: ModelOption[] = [
+  { id: "local-model-placeholder", label: "Coming soon" },
 ];
+
+function openAiLabel(modelId: string): string {
+  const suffix = modelId.replace(/^gpt-/, "");
+  const normalized = suffix.endsWith("-mini")
+    ? `${suffix.replace(/-mini$/, "")} Mini`
+    : suffix;
+  return `GPT-${normalized}`;
+}
+
+function geminiLabel(modelId: string): string {
+  const suffix = modelId.replace(/^gemini-/, "");
+  return `Gemini ${suffix
+    .split("-")
+    .map((part) => {
+      if (part === "flash") return "Flash";
+      if (part === "lite") return "Lite";
+      if (part === "pro") return "Pro";
+      if (part === "preview") return "Preview";
+      return part;
+    })
+    .join(" ")}`;
+}
+
+const OPENAI_MODEL_OPTIONS: ModelOption[] = OPENAI_MODELS.map((id) => ({
+  id,
+  label: openAiLabel(id),
+}));
+
+const GEMINI_MODEL_OPTIONS: ModelOption[] = Object.keys(GEMINI_MODELS).map((id) => ({
+  id,
+  label: geminiLabel(id),
+}));
 
 const MAX_ROWS = 6;
 const LINE_HEIGHT = 20; // px, approximate for text-sm
@@ -44,6 +80,8 @@ export default function ChatInput({
   disabled?: boolean;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [hasOpenAiKey, setHasOpenAiKey] = useState(false);
+  const [hasGeminiKey, setHasGeminiKey] = useState(false);
 
   const handleInput = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -65,8 +103,45 @@ export default function ChatInput({
     ta.style.height = `${Math.min(ta.scrollHeight, maxHeight)}px`;
   }, [value]);
 
-  const currentModelLabel =
-    MODELS.find((m) => m.id === model)?.label ?? model;
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSettings() {
+      try {
+        const res = await fetch("/api/settings", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          openai_api_key?: unknown;
+          gemini_api_key?: unknown;
+        };
+        if (cancelled) return;
+
+        setHasOpenAiKey(
+          typeof data.openai_api_key === "string" && data.openai_api_key.trim().length > 0
+        );
+        setHasGeminiKey(
+          typeof data.gemini_api_key === "string" && data.gemini_api_key.trim().length > 0
+        );
+      } catch {
+        // Ignore settings fetch errors; keep provider models disabled by default.
+      }
+    }
+
+    void loadSettings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const currentModelLabel = useMemo(() => {
+    const allModels = [
+      ...OPENAI_MODEL_OPTIONS,
+      ...GEMINI_MODEL_OPTIONS,
+      ...LOCAL_MODELS,
+    ];
+    return allModels.find((m) => m.id === model)?.label ?? model;
+  }, [model]);
 
   return (
     <div className="absolute inset-x-0 bottom-0 z-20">
@@ -116,27 +191,103 @@ export default function ChatInput({
 
         {/* Model selector pill below */}
         <div className="flex items-center">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700/60 bg-zinc-900/65 px-3 py-1 text-xs text-zinc-400 hover:text-zinc-300 hover:border-zinc-600 transition-colors focus:outline-none">
-                {currentModelLabel}
-                <ChevronDown className="h-3 w-3 opacity-95" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="bg-zinc-900 border-zinc-700 min-w-[200px]">
-              <DropdownMenuRadioGroup value={model} onValueChange={onModelChange}>
-                {MODELS.map((m) => (
-                  <DropdownMenuRadioItem
-                    key={m.id}
-                    value={m.id}
-                    className="text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100 cursor-pointer"
-                  >
-                    {m.label}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <TooltipProvider>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700/60 bg-zinc-900/65 px-3 py-1 text-xs text-zinc-400 hover:text-zinc-300 hover:border-zinc-600 transition-colors focus:outline-none">
+                  {currentModelLabel}
+                  <ChevronDown className="h-3 w-3 opacity-95" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="bg-zinc-900 border-zinc-700 min-w-[240px]">
+                <DropdownMenuRadioGroup value={model} onValueChange={onModelChange}>
+                  <DropdownMenuLabel className="text-zinc-400">OpenAI</DropdownMenuLabel>
+                  {OPENAI_MODEL_OPTIONS.map((m) => {
+                    const disabledItem = !hasOpenAiKey;
+                    const item = (
+                      <DropdownMenuRadioItem
+                        key={m.id}
+                        value={m.id}
+                        disabled={disabledItem}
+                        className={cn(
+                          "text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100",
+                          disabledItem ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+                        )}
+                      >
+                        {m.label}
+                      </DropdownMenuRadioItem>
+                    );
+
+                    if (!disabledItem) return item;
+
+                    return (
+                      <Tooltip key={m.id}>
+                        <TooltipTrigger asChild>
+                          <div>{item}</div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          Add your OpenAI API key in Settings to use these models
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+
+                  <DropdownMenuSeparator className="bg-zinc-800" />
+                  <DropdownMenuLabel className="text-zinc-400">Google Gemini</DropdownMenuLabel>
+                  {GEMINI_MODEL_OPTIONS.map((m) => {
+                    const disabledItem = !hasGeminiKey;
+                    const item = (
+                      <DropdownMenuRadioItem
+                        key={m.id}
+                        value={m.id}
+                        disabled={disabledItem}
+                        className={cn(
+                          "text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100",
+                          disabledItem ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+                        )}
+                      >
+                        {m.label}
+                      </DropdownMenuRadioItem>
+                    );
+
+                    if (!disabledItem) return item;
+
+                    return (
+                      <Tooltip key={m.id}>
+                        <TooltipTrigger asChild>
+                          <div>{item}</div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          Add your Google Gemini API key in Settings to use these models
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+
+                  <DropdownMenuSeparator className="bg-zinc-800" />
+                  <DropdownMenuLabel className="text-zinc-400">Local Models</DropdownMenuLabel>
+                  {LOCAL_MODELS.map((m) => (
+                    <Tooltip key={m.id}>
+                      <TooltipTrigger asChild>
+                        <div>
+                          <DropdownMenuRadioItem
+                            value={m.id}
+                            disabled
+                            className="text-zinc-300 opacity-50 cursor-not-allowed"
+                          >
+                            {m.label}
+                          </DropdownMenuRadioItem>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        Local model support coming soon
+                      </TooltipContent>
+                    </Tooltip>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </TooltipProvider>
         </div>
       </div>
     </div>
