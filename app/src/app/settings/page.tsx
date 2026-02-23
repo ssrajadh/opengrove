@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 
 type ProviderId = "openai" | "gemini" | "anthropic";
 type ProviderStatus = "idle" | "saving" | "saved" | "error" | "testing" | "success" | "failure";
+type LocalRuntime = "ollama" | "lmstudio" | "llamacpp" | "custom";
+type LocalTestStatus = "idle" | "testing" | "success" | "failure";
 
 type ProviderConfig = {
   id: ProviderId;
@@ -51,6 +53,27 @@ const PROVIDERS: ProviderConfig[] = [
   },
 ];
 
+const LOCAL_RUNTIME_OPTIONS: Array<{ value: LocalRuntime; label: string }> = [
+  { value: "ollama", label: "Ollama" },
+  { value: "lmstudio", label: "LM Studio" },
+  { value: "llamacpp", label: "llama.cpp" },
+  { value: "custom", label: "Other / OpenAI-compatible" },
+];
+
+const LOCAL_RUNTIME_ENDPOINTS: Record<LocalRuntime, string> = {
+  ollama: "http://localhost:11434",
+  lmstudio: "http://localhost:1234",
+  llamacpp: "http://localhost:8080",
+  custom: "",
+};
+
+const LOCAL_RUNTIME_HELPERS: Record<LocalRuntime, string> = {
+  ollama: "Make sure Ollama is running (ollama serve)",
+  lmstudio: "Enable the local server in LM Studio under the Local Server tab",
+  llamacpp: "Start the server with ./server -m your-model.gguf",
+  custom: "",
+};
+
 function parseHiddenModels(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.filter((item): item is string => typeof item === "string");
@@ -74,6 +97,25 @@ function statusClass(status: ProviderStatus) {
   return "text-zinc-500";
 }
 
+function parseBooleanSetting(value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function parseLocalRuntime(value: unknown): LocalRuntime {
+  if (
+    value === "ollama" ||
+    value === "lmstudio" ||
+    value === "llamacpp" ||
+    value === "custom"
+  ) {
+    return value;
+  }
+  return "custom";
+}
+
 export default function SettingsPage() {
   const [apiKeys, setApiKeys] = useState<Record<ProviderId, string>>({
     openai: "",
@@ -93,6 +135,15 @@ export default function SettingsPage() {
     anthropic: { status: "idle", message: "" },
   });
   const [hiddenSaveError, setHiddenSaveError] = useState("");
+  const [localModelsEnabled, setLocalModelsEnabled] = useState(false);
+  const [localRuntime, setLocalRuntime] = useState<LocalRuntime>("custom");
+  const [localEndpoint, setLocalEndpoint] = useState("");
+  const [localHiddenModels, setLocalHiddenModels] = useState<Set<string>>(new Set());
+  const [localAvailableModels, setLocalAvailableModels] = useState<string[]>([]);
+  const [localStatus, setLocalStatus] = useState<{ status: LocalTestStatus; message: string }>({
+    status: "idle",
+    message: "",
+  });
 
   const loadSettings = useCallback(async () => {
     setLoading(true);
@@ -107,6 +158,10 @@ export default function SettingsPage() {
         anthropic: typeof data.anthropic_api_key === "string" ? data.anthropic_api_key : "",
       });
       setHiddenModels(new Set(parseHiddenModels(data.hidden_models)));
+      setLocalModelsEnabled(parseBooleanSetting(data.local_models_enabled));
+      setLocalRuntime(parseLocalRuntime(data.local_runtime));
+      setLocalEndpoint(typeof data.local_endpoint === "string" ? data.local_endpoint : "");
+      setLocalHiddenModels(new Set(parseHiddenModels(data.local_models_hidden)));
     } catch {
       setHiddenSaveError("Failed to load settings.");
     } finally {
@@ -236,6 +291,25 @@ export default function SettingsPage() {
     return map;
   }, []);
 
+  const persistLocalSettings = useCallback(
+    async (payload: Record<string, unknown>) => {
+      const data = await saveSettingsPatch(payload);
+      if (Object.prototype.hasOwnProperty.call(payload, "local_models_enabled")) {
+        setLocalModelsEnabled(parseBooleanSetting(data.local_models_enabled));
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, "local_runtime")) {
+        setLocalRuntime(parseLocalRuntime(data.local_runtime));
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, "local_endpoint")) {
+        setLocalEndpoint(typeof data.local_endpoint === "string" ? data.local_endpoint : "");
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, "local_models_hidden")) {
+        setLocalHiddenModels(new Set(parseHiddenModels(data.local_models_hidden)));
+      }
+    },
+    [saveSettingsPatch]
+  );
+
   const toggleModelVisibility = useCallback(
     (providerId: ProviderId, modelId: string) => {
       const provider = providerById.get(providerId);
@@ -257,6 +331,85 @@ export default function SettingsPage() {
     },
     [apiKeys, hiddenModels, persistHiddenModels, providerById]
   );
+
+  const handleLocalEnabledChange = useCallback(async (nextEnabled: boolean) => {
+    setLocalModelsEnabled(nextEnabled);
+    try {
+      await persistLocalSettings({
+        local_models_enabled: nextEnabled ? "true" : "false",
+      });
+    } catch {
+      setLocalModelsEnabled((prev) => !prev);
+    }
+  }, [persistLocalSettings]);
+
+  const handleLocalRuntimeChange = useCallback(async (nextRuntime: LocalRuntime) => {
+    const nextEndpoint = LOCAL_RUNTIME_ENDPOINTS[nextRuntime];
+    setLocalRuntime(nextRuntime);
+    setLocalEndpoint(nextEndpoint);
+    try {
+      await persistLocalSettings({
+        local_runtime: nextRuntime,
+        local_endpoint: nextEndpoint,
+      });
+    } catch {
+      // Ignore: state remains optimistic for a better editing flow.
+    }
+  }, [persistLocalSettings]);
+
+  const handleLocalEndpointChange = useCallback(async (value: string) => {
+    setLocalEndpoint(value);
+    try {
+      await persistLocalSettings({ local_endpoint: value });
+    } catch {
+      // Ignore: preserve current typed value in the input.
+    }
+  }, [persistLocalSettings]);
+
+  const toggleLocalModelVisibility = useCallback((modelId: string) => {
+    const previous = new Set(localHiddenModels);
+    const next = new Set(localHiddenModels);
+    if (next.has(modelId)) {
+      next.delete(modelId);
+    } else {
+      next.add(modelId);
+    }
+    setLocalHiddenModels(next);
+
+    void persistLocalSettings({
+      local_models_hidden: JSON.stringify(Array.from(next)),
+    }).catch(() => {
+      setLocalHiddenModels(previous);
+    });
+  }, [localHiddenModels, persistLocalSettings]);
+
+  const testLocalConnection = useCallback(async () => {
+    setLocalStatus({ status: "testing", message: "" });
+    try {
+      const res = await fetch("/api/local-models", { cache: "no-store" });
+      const data = (await res.json().catch(() => ({}))) as { models?: unknown; error?: string };
+      if (!res.ok || data.error) {
+        setLocalAvailableModels([]);
+        setLocalStatus({
+          status: "failure",
+          message: typeof data.error === "string" ? data.error : "Connection failed",
+        });
+        return;
+      }
+
+      const models = Array.isArray(data.models)
+        ? data.models.filter((item): item is string => typeof item === "string")
+        : [];
+      setLocalAvailableModels(models);
+      setLocalStatus({
+        status: "success",
+        message: `Connected — ${models.length} models available`,
+      });
+    } catch {
+      setLocalAvailableModels([]);
+      setLocalStatus({ status: "failure", message: "Connection failed" });
+    }
+  }, []);
 
   return (
     <main className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
@@ -394,8 +547,132 @@ export default function SettingsPage() {
           <TabsContent value="local-models" className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-5">
             <h2 className="text-lg font-medium text-zinc-100">Local Models</h2>
             <p className="mt-1 text-sm text-zinc-400">
-              Local runtime configuration and model visibility controls will appear here.
+              Configure a local OpenAI-compatible runtime and control visible local models.
             </p>
+
+            <section className="mt-5 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-zinc-100">Enable local models</p>
+                  <p className="text-xs text-zinc-500">Allow local runtime models to appear in model selection.</p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={localModelsEnabled}
+                  onClick={() => void handleLocalEnabledChange(!localModelsEnabled)}
+                  disabled={loading}
+                  className={`relative h-6 w-11 rounded-full transition-colors ${
+                    localModelsEnabled ? "bg-emerald-500" : "bg-zinc-700"
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                >
+                  <span
+                    className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                      localModelsEnabled ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div className={`mt-5 space-y-4 ${localModelsEnabled ? "" : "pointer-events-none opacity-50"}`}>
+                <div className="space-y-2">
+                  <label htmlFor="local-runtime" className="text-sm font-medium text-zinc-200">
+                    Runtime
+                  </label>
+                  <select
+                    id="local-runtime"
+                    value={localRuntime}
+                    onChange={(e) => void handleLocalRuntimeChange(parseLocalRuntime(e.target.value))}
+                    disabled={loading}
+                    className="h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:ring-2 focus:ring-zinc-600"
+                  >
+                    {LOCAL_RUNTIME_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  {LOCAL_RUNTIME_HELPERS[localRuntime] && (
+                    <p className="text-xs text-zinc-500">{LOCAL_RUNTIME_HELPERS[localRuntime]}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <label htmlFor="local-endpoint" className="text-sm font-medium text-zinc-200">
+                    Endpoint URL
+                  </label>
+                  <Input
+                    id="local-endpoint"
+                    value={localEndpoint}
+                    onChange={(e) => {
+                      void handleLocalEndpointChange(e.target.value);
+                    }}
+                    placeholder="http://localhost:11434"
+                    className="border-zinc-700 bg-zinc-950 text-zinc-100 placeholder:text-zinc-500"
+                    disabled={loading}
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-zinc-700 bg-transparent text-zinc-200 hover:bg-zinc-800"
+                    onClick={() => void testLocalConnection()}
+                    disabled={localStatus.status === "testing" || loading}
+                  >
+                    {localStatus.status === "testing" ? (
+                      <span className="inline-flex items-center gap-2">
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-transparent" />
+                        Testing...
+                      </span>
+                    ) : (
+                      "Test connection"
+                    )}
+                  </Button>
+
+                  {localStatus.message && (
+                    <p className={localStatus.status === "success" ? "text-sm text-emerald-400" : "text-sm text-red-400"}>
+                      {localStatus.message}
+                    </p>
+                  )}
+                </div>
+
+                <div className="rounded-md border border-zinc-800 p-3">
+                  <p className="text-sm font-medium text-zinc-200">Visible local models</p>
+                  {localStatus.status !== "success" ? (
+                    <p className="mt-1 text-xs text-zinc-500">Run connection test to see available models</p>
+                  ) : (
+                    <div className="mt-3 space-y-2">
+                      {localAvailableModels.map((modelId) => {
+                        const visible = !localHiddenModels.has(modelId);
+                        return (
+                          <div key={modelId} className="flex items-center justify-between gap-3">
+                            <span className="text-sm text-zinc-300">{modelId}</span>
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={visible}
+                              onClick={() => toggleLocalModelVisibility(modelId)}
+                              disabled={loading}
+                              className={`relative h-6 w-11 rounded-full transition-colors ${
+                                visible ? "bg-emerald-500" : "bg-zinc-700"
+                              } disabled:cursor-not-allowed`}
+                            >
+                              <span
+                                className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                                  visible ? "translate-x-5" : "translate-x-0"
+                                }`}
+                              />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
           </TabsContent>
         </Tabs>
       </div>
