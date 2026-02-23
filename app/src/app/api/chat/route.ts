@@ -31,6 +31,10 @@ function isOpenAIModel(modelKey: string): boolean {
   return OPENAI_MODELS.includes(modelKey) || modelKey.startsWith("gpt-");
 }
 
+function isLocalModel(modelKey: string): boolean {
+  return modelKey.startsWith("local:");
+}
+
 function streamLine(obj: object): string {
   return JSON.stringify(obj) + "\n";
 }
@@ -117,6 +121,34 @@ export async function POST(req: NextRequest) {
               ) {
                 fullText += event.delta;
                 send({ type: "chunk", text: event.delta });
+              }
+            }
+          } else if (isLocalModel(modelKey)) {
+            const settings = getSettings();
+            const endpoint = settings.local_endpoint?.trim();
+            if (!endpoint) {
+              send({ type: "error", error: "No local endpoint configured" });
+              controller.close();
+              return;
+            }
+
+            const modelId = modelKey.slice("local:".length);
+            const baseURL = `${endpoint.replace(/\/+$/, "")}/v1`;
+            const openai = new OpenAI({ baseURL, apiKey: "local" });
+            const streamResponse = await openai.chat.completions.create({
+              model: modelId,
+              messages: history.map((m) => ({
+                role: m.role,
+                content: m.content,
+              })),
+              stream: true,
+            });
+
+            for await (const chunk of streamResponse) {
+              const text = chunk.choices?.[0]?.delta?.content ?? "";
+              if (text) {
+                fullText += text;
+                send({ type: "chunk", text });
               }
             }
           } else {
