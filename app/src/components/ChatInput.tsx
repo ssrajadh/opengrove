@@ -50,6 +50,23 @@ function geminiLabel(modelId: string): string {
     .join(" ")}`;
 }
 
+function parseHiddenModels(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string");
+  }
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed)
+        ? parsed.filter((item): item is string => typeof item === "string")
+        : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 const OPENAI_MODEL_OPTIONS: ModelOption[] = OPENAI_MODELS.map((id) => ({
   id,
   label: openAiLabel(id),
@@ -82,6 +99,10 @@ export default function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [hasOpenAiKey, setHasOpenAiKey] = useState(false);
   const [hasGeminiKey, setHasGeminiKey] = useState(false);
+  const [localModelsEnabled, setLocalModelsEnabled] = useState(false);
+  const [localRuntimeConfigured, setLocalRuntimeConfigured] = useState(false);
+  const [localModelsFetchSucceeded, setLocalModelsFetchSucceeded] = useState(false);
+  const [localModelOptions, setLocalModelOptions] = useState<ModelOption[]>([]);
 
   const handleInput = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -108,20 +129,66 @@ export default function ChatInput({
 
     async function loadSettings() {
       try {
-        const res = await fetch("/api/settings", { cache: "no-store" });
-        if (!res.ok) return;
-        const data = (await res.json()) as {
-          openai_api_key?: unknown;
-          gemini_api_key?: unknown;
-        };
-        if (cancelled) return;
+        const [settingsRes, localModelsRes] = await Promise.allSettled([
+          fetch("/api/settings", { cache: "no-store" }),
+          fetch("/api/local-models", { cache: "no-store" }),
+        ]);
 
-        setHasOpenAiKey(
-          typeof data.openai_api_key === "string" && data.openai_api_key.trim().length > 0
-        );
-        setHasGeminiKey(
-          typeof data.gemini_api_key === "string" && data.gemini_api_key.trim().length > 0
-        );
+        let localHidden = new Set<string>();
+        let enabled = false;
+        let configured = false;
+
+        if (settingsRes.status === "fulfilled" && settingsRes.value.ok) {
+          const data = (await settingsRes.value.json()) as {
+            openai_api_key?: unknown;
+            gemini_api_key?: unknown;
+            local_models_enabled?: unknown;
+            local_endpoint?: unknown;
+            local_models_hidden?: unknown;
+          };
+          if (cancelled) return;
+
+          setHasOpenAiKey(
+            typeof data.openai_api_key === "string" && data.openai_api_key.trim().length > 0
+          );
+          setHasGeminiKey(
+            typeof data.gemini_api_key === "string" && data.gemini_api_key.trim().length > 0
+          );
+
+          enabled =
+            typeof data.local_models_enabled === "string" &&
+            ["1", "true", "yes", "on"].includes(data.local_models_enabled.trim().toLowerCase());
+          configured =
+            typeof data.local_endpoint === "string" && data.local_endpoint.trim().length > 0;
+          localHidden = new Set(parseHiddenModels(data.local_models_hidden));
+
+          setLocalModelsEnabled(enabled);
+          setLocalRuntimeConfigured(configured);
+        }
+
+        if (localModelsRes.status === "fulfilled" && localModelsRes.value.ok) {
+          const data = (await localModelsRes.value.json()) as {
+            models?: unknown;
+            error?: unknown;
+          };
+          if (cancelled) return;
+
+          if (!data.error && Array.isArray(data.models) && enabled) {
+            const options = data.models
+              .filter((item): item is string => typeof item === "string")
+              .filter((id) => !localHidden.has(id))
+              .map((id) => ({ id: `local:${id}`, label: id }));
+            setLocalModelOptions(options);
+            setLocalModelsFetchSucceeded(true);
+          } else {
+            setLocalModelOptions([]);
+            setLocalModelsFetchSucceeded(false);
+          }
+        } else {
+          if (cancelled) return;
+          setLocalModelOptions([]);
+          setLocalModelsFetchSucceeded(false);
+        }
       } catch {
         // Ignore settings fetch errors; keep provider models disabled by default.
       }
@@ -138,10 +205,11 @@ export default function ChatInput({
     const allModels = [
       ...OPENAI_MODEL_OPTIONS,
       ...GEMINI_MODEL_OPTIONS,
+      ...localModelOptions,
       ...LOCAL_MODELS,
     ];
     return allModels.find((m) => m.id === model)?.label ?? model;
-  }, [model]);
+  }, [localModelOptions, model]);
 
   return (
     <div className="absolute inset-x-0 bottom-0 z-20">
@@ -266,24 +334,36 @@ export default function ChatInput({
 
                   <DropdownMenuSeparator className="bg-zinc-800" />
                   <DropdownMenuLabel className="text-zinc-400">Local Models</DropdownMenuLabel>
-                  {LOCAL_MODELS.map((m) => (
-                    <Tooltip key={m.id}>
-                      <TooltipTrigger asChild>
-                        <div>
-                          <DropdownMenuRadioItem
-                            value={m.id}
-                            disabled
-                            className="text-zinc-300 opacity-50 cursor-not-allowed"
-                          >
-                            {m.label}
-                          </DropdownMenuRadioItem>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        Local model support coming soon
-                      </TooltipContent>
-                    </Tooltip>
-                  ))}
+                  {localModelsEnabled && localModelsFetchSucceeded
+                    ? localModelOptions.map((m) => (
+                        <DropdownMenuRadioItem
+                          key={m.id}
+                          value={m.id}
+                          className="text-zinc-300 focus:bg-zinc-800 focus:text-zinc-100 cursor-pointer"
+                        >
+                          {m.label}
+                        </DropdownMenuRadioItem>
+                      ))
+                    : LOCAL_MODELS.map((m) => (
+                        <Tooltip key={m.id}>
+                          <TooltipTrigger asChild>
+                            <div>
+                              <DropdownMenuRadioItem
+                                value={m.id}
+                                disabled
+                                className="text-zinc-300 opacity-50 cursor-not-allowed"
+                              >
+                                {m.label}
+                              </DropdownMenuRadioItem>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {localRuntimeConfigured && !localModelsEnabled
+                              ? "Enable local models in Settings"
+                              : "Local model support coming soon"}
+                          </TooltipContent>
+                        </Tooltip>
+                      ))}
                 </DropdownMenuRadioGroup>
               </DropdownMenuContent>
             </DropdownMenu>
