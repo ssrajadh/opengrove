@@ -43,6 +43,12 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
+
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+  );
 `);
 
 // Migration: add is_embedded column to messages
@@ -340,6 +346,62 @@ export function upsertEmbeddingConfig(model: string, dimensions: number): void {
     ON CONFLICT(id) DO UPDATE SET model = ?, dimensions = ?, updated_at = unixepoch()
   `);
   stmt.run(model, dimensions, model, dimensions);
+}
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+
+const SUPPORTED_SETTINGS_KEYS = [
+  "openai_api_key",
+  "gemini_api_key",
+  "anthropic_api_key",
+  "default_model",
+  "hidden_models",
+] as const;
+
+export type SettingKey = (typeof SUPPORTED_SETTINGS_KEYS)[number];
+export type SettingsMap = Partial<Record<SettingKey, string>>;
+
+export function isSupportedSettingKey(value: string): value is SettingKey {
+  return SUPPORTED_SETTINGS_KEYS.includes(value as SettingKey);
+}
+
+export function getSettings(): SettingsMap {
+  const rows = db.prepare(
+    "SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?, ?)"
+  ).all(...SUPPORTED_SETTINGS_KEYS) as Array<{ key: string; value: string }>;
+
+  const settings: SettingsMap = {};
+  for (const row of rows) {
+    if (isSupportedSettingKey(row.key)) {
+      settings[row.key] = row.value;
+    }
+  }
+
+  return settings;
+}
+
+export function upsertSettings(settings: SettingsMap): void {
+  const entries = Object.entries(settings).filter(
+    (entry): entry is [SettingKey, string] =>
+      isSupportedSettingKey(entry[0]) && typeof entry[1] === "string"
+  );
+  if (entries.length === 0) return;
+
+  const stmt = db.prepare(`
+    INSERT INTO settings (key, value, updated_at)
+    VALUES (?, ?, unixepoch())
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = unixepoch()
+  `);
+
+  const tx = db.transaction((pairs: Array<[SettingKey, string]>) => {
+    for (const [key, value] of pairs) {
+      stmt.run(key, value);
+    }
+  });
+
+  tx(entries);
 }
 
 // ---------------------------------------------------------------------------
