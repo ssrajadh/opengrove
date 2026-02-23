@@ -5,6 +5,7 @@ import {
   insertMessage,
   getFullHistory,
   createConversation,
+  getSettings,
 } from "@/lib/db";
 import { buildContextWithRAG } from "@/lib/rag";
 import { embedAndStoreOverflow } from "@/lib/embeddings";
@@ -95,9 +96,10 @@ export async function POST(req: NextRequest) {
 
         try {
           if (isOpenAIModel(modelKey)) {
-            const apiKey = process.env.OPENAI_API_KEY;
+            const settings = getSettings();
+            const apiKey = settings.openai_api_key?.trim() || process.env.OPENAI_API_KEY;
             if (!apiKey) {
-              send({ type: "error", error: "OPENAI_API_KEY not set. Add it to .env" });
+              send({ type: "error", error: "OpenAI API key not set. Add it in Settings or .env" });
               controller.close();
               return;
             }
@@ -127,9 +129,10 @@ export async function POST(req: NextRequest) {
               }
             }
           } else {
-            const apiKey = process.env.GEMINI_API_KEY;
+            const settings = getSettings();
+            const apiKey = settings.gemini_api_key?.trim() || process.env.GEMINI_API_KEY;
             if (!apiKey) {
-              send({ type: "error", error: "GEMINI_API_KEY not set. Add it to .env" });
+              send({ type: "error", error: "Gemini API key not set. Add it in Settings or .env" });
               controller.close();
               return;
             }
