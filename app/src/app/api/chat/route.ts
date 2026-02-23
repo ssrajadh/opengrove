@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     await insertMessage(userMsgId, id, "user", messageText);
 
     const allMessages = await getFullHistory(id);
-    const contextLimit = MODEL_CONTEXT_TOKENS[modelKey] ?? 128_000;
+    const contextLimit = MODEL_CONTEXT_TOKENS[modelKey] ?? 32_768;
     const { ragContext, recentMessages, overflow } = await buildContextWithRAG(
       id, allMessages, messageText, contextLimit, RESPONSE_BUFFER_TOKENS,
     );
