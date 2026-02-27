@@ -1,10 +1,10 @@
 import Database from "better-sqlite3";
 import path from "path";
 import * as sqliteVec from "sqlite-vec";
-import type { Conversation, Message, LineageEntry } from "@/types";
+import type { Conversation, Message, LineageEntry, ConversationUsage } from "@/types";
 import { randomUUID } from "crypto";
 
-export type { Conversation, Message, LineageEntry };
+export type { Conversation, Message, LineageEntry, ConversationUsage };
 
 // ---------------------------------------------------------------------------
 // Database setup
@@ -78,6 +78,22 @@ db.exec(`
     dimensions INTEGER NOT NULL,
     updated_at INTEGER NOT NULL DEFAULT (unixepoch())
   );
+`);
+
+// Usage tracking
+db.exec(`
+  CREATE TABLE IF NOT EXISTS usage (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    model TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cost REAL NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_usage_conversation ON usage(conversation_id);
 `);
 
 // ---------------------------------------------------------------------------
@@ -321,6 +337,32 @@ export async function insertMessage(
     "INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)"
   );
   stmt.run(id, conversationId, role, content);
+}
+
+// ---------------------------------------------------------------------------
+// Usage tracking
+// ---------------------------------------------------------------------------
+
+export function insertUsage(
+  id: string,
+  conversationId: string,
+  messageId: string,
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+  cost: number,
+): void {
+  const stmt = db.prepare(
+    "INSERT INTO usage (id, conversation_id, message_id, model, input_tokens, output_tokens, cost) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  );
+  stmt.run(id, conversationId, messageId, model, inputTokens, outputTokens, cost);
+}
+
+export function getConversationUsage(conversationId: string): ConversationUsage {
+  const row = db.prepare(
+    "SELECT COALESCE(SUM(input_tokens), 0) AS totalInputTokens, COALESCE(SUM(output_tokens), 0) AS totalOutputTokens, COALESCE(SUM(cost), 0) AS totalCost FROM usage WHERE conversation_id = ?"
+  ).get(conversationId) as { totalInputTokens: number; totalOutputTokens: number; totalCost: number };
+  return row;
 }
 
 // ---------------------------------------------------------------------------

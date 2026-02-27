@@ -4,9 +4,21 @@ import { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import MessageList from "@/components/MessageList";
 import ChatInput from "@/components/ChatInput";
-import type { Conversation, ClientMessage } from "@/types";
+import type { Conversation, ClientMessage, ConversationUsage } from "@/types";
 
 type Message = ClientMessage;
+
+function formatCost(cost: number): string {
+  if (cost === 0) return "$0.00";
+  if (cost < 0.01) return `$${cost.toFixed(4)}`;
+  return `$${cost.toFixed(2)}`;
+}
+
+function formatTokens(tokens: number): string {
+  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
+  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}K`;
+  return String(tokens);
+}
 
 export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -15,6 +27,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [model, setModel] = useState("gemini-2.0-flash");
   const [loading, setLoading] = useState(false);
+  const [conversationUsage, setConversationUsage] = useState<ConversationUsage | null>(null);
 
   const fetchConversations = useCallback(async () => {
     const res = await fetch("/api/conversations");
@@ -29,8 +42,14 @@ export default function Home() {
     if (res.ok) {
       const data = await res.json();
       setMessages(data.messages ?? []);
+      if (data.usage) {
+        setConversationUsage(data.usage);
+      } else {
+        setConversationUsage(null);
+      }
     } else {
       setMessages([]);
+      setConversationUsage(null);
     }
   }, []);
 
@@ -43,6 +62,7 @@ export default function Home() {
       fetchMessages(currentId);
     } else {
       setMessages([]);
+      setConversationUsage(null);
     }
   }, [currentId, fetchMessages]);
 
@@ -50,6 +70,7 @@ export default function Home() {
     setCurrentId(null);
     setMessages([]);
     setInput("");
+    setConversationUsage(null);
   };
 
   const handleDeleteChat = async (id: string) => {
@@ -144,7 +165,7 @@ export default function Home() {
         for (const line of lines) {
           const trimmed = line.trim();
           if (!trimmed) continue;
-          let data: { type: string; text?: string; error?: string; conversationId?: string; message?: Message };
+          let data: { type: string; text?: string; error?: string; conversationId?: string; message?: Message; usage?: { inputTokens: number; outputTokens: number; cost: number } };
           try {
             data = JSON.parse(trimmed) as typeof data;
           } catch {
@@ -165,6 +186,13 @@ export default function Home() {
                 m.id === streamingAssistantId ? data.message! : m
               )
             );
+            if (data.usage) {
+              setConversationUsage((prev) => ({
+                totalInputTokens: (prev?.totalInputTokens ?? 0) + data.usage!.inputTokens,
+                totalOutputTokens: (prev?.totalOutputTokens ?? 0) + data.usage!.outputTokens,
+                totalCost: (prev?.totalCost ?? 0) + data.usage!.cost,
+              }));
+            }
             await fetchConversations();
           } else if (data.type === "error") {
             setMessages((prev) => prev.filter((m) => m.id !== streamingAssistantId));
@@ -175,7 +203,7 @@ export default function Home() {
 
       if (buffer.trim()) {
         try {
-          const data = JSON.parse(buffer.trim()) as { type: string; error?: string; conversationId?: string; message?: Message };
+          const data = JSON.parse(buffer.trim()) as { type: string; error?: string; conversationId?: string; message?: Message; usage?: { inputTokens: number; outputTokens: number; cost: number } };
           if (data.type === "done" && data.conversationId != null && data.message) {
             setCurrentId(data.conversationId);
             setMessages((prev) =>
@@ -183,6 +211,13 @@ export default function Home() {
                 m.id === streamingAssistantId ? data.message! : m
               )
             );
+            if (data.usage) {
+              setConversationUsage((prev) => ({
+                totalInputTokens: (prev?.totalInputTokens ?? 0) + data.usage!.inputTokens,
+                totalOutputTokens: (prev?.totalOutputTokens ?? 0) + data.usage!.outputTokens,
+                totalCost: (prev?.totalCost ?? 0) + data.usage!.cost,
+              }));
+            }
             await fetchConversations();
           } else if (data.type === "error") {
             setMessages((prev) => prev.filter((m) => m.id !== streamingAssistantId));
@@ -210,10 +245,15 @@ export default function Home() {
         onDelete={handleDeleteChat}
       />
       <main className="flex-1 flex flex-col min-w-0">
-        <header className="shrink-0 border-b border-[var(--border)] px-4 py-3">
+        <header className="shrink-0 border-b border-[var(--border)] px-4 py-3 flex items-center justify-between">
           <h1 className="text-sm font-medium text-[var(--text-muted)]">
             OpenGrove
           </h1>
+          {conversationUsage && conversationUsage.totalCost > 0 && (
+            <span className="text-xs text-[var(--text-muted)] tabular-nums">
+              {formatCost(conversationUsage.totalCost)} · {formatTokens(conversationUsage.totalInputTokens + conversationUsage.totalOutputTokens)} tokens
+            </span>
+          )}
         </header>
         <div className="relative flex-1 flex flex-col min-h-0">
           <MessageList messages={messages} onBranch={currentId ? handleBranch : undefined} />

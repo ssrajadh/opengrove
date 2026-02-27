@@ -7,9 +7,12 @@ import {
   getFullHistory,
   createConversation,
   getSettings,
+  insertUsage,
 } from "@/lib/db";
 import { buildContextWithRAG } from "@/lib/rag";
 import { embedAndStoreOverflow } from "@/lib/embeddings";
+import { calculateCost } from "@/lib/model-pricing";
+import { estimateTokens } from "@/lib/tokens";
 import { randomUUID } from "crypto";
 /** Context window sizes in tokens per model. */
 const MODEL_CONTEXT_TOKENS: Record<string, number> = {
@@ -82,6 +85,8 @@ export async function POST(req: NextRequest) {
 
     const encoder = new TextEncoder();
     let fullText = "";
+    let inputTokens = 0;
+    let outputTokens = 0;
 
     const stream = new ReadableStream({
       async start(controller) {
@@ -121,6 +126,9 @@ export async function POST(req: NextRequest) {
               ) {
                 fullText += event.delta;
                 send({ type: "chunk", text: event.delta });
+              } else if (event.type === "response.completed" && event.response?.usage) {
+                inputTokens = event.response.usage.input_tokens ?? 0;
+                outputTokens = event.response.usage.output_tokens ?? 0;
               }
             }
           } else if (isLocalModel(modelKey)) {
@@ -142,6 +150,7 @@ export async function POST(req: NextRequest) {
                 content: m.content,
               })),
               stream: true,
+              stream_options: { include_usage: true },
             });
 
             for await (const chunk of streamResponse) {
@@ -149,6 +158,10 @@ export async function POST(req: NextRequest) {
               if (text) {
                 fullText += text;
                 send({ type: "chunk", text });
+              }
+              if (chunk.usage) {
+                inputTokens = chunk.usage.prompt_tokens ?? 0;
+                outputTokens = chunk.usage.completion_tokens ?? 0;
               }
             }
           } else {
@@ -178,11 +191,27 @@ export async function POST(req: NextRequest) {
                 fullText += text;
                 send({ type: "chunk", text });
               }
+              if (chunk.usageMetadata) {
+                inputTokens = chunk.usageMetadata.promptTokenCount ?? 0;
+                outputTokens = chunk.usageMetadata.candidatesTokenCount ?? 0;
+              }
             }
+          }
+
+          // Fall back to estimation if provider didn't report usage
+          if (inputTokens === 0) {
+            inputTokens = estimateTokens(history.map((m) => m.content).join(""));
+          }
+          if (outputTokens === 0) {
+            outputTokens = estimateTokens(fullText);
           }
 
           const text = fullText.trim();
           await insertMessage(assistantMsgId, id, "assistant", text);
+
+          // Store usage record
+          const cost = calculateCost(modelKey, inputTokens, outputTokens);
+          insertUsage(randomUUID(), id, assistantMsgId, modelKey, inputTokens, outputTokens, cost);
 
           // Fire-and-forget: embed overflow messages for future RAG retrieval
           if (overflow.length > 0) {
@@ -195,6 +224,7 @@ export async function POST(req: NextRequest) {
             type: "done",
             conversationId: id,
             message: { role: "assistant" as const, content: text, id: assistantMsgId },
+            usage: { inputTokens, outputTokens, cost },
           });
         } catch (err) {
           console.error("Chat API error:", err);
